@@ -682,6 +682,7 @@ with col_conteudo_dinamico:
                         st.rerun()
 
     # =====================================================================
+   # =====================================================================
     # MÓDULO RELATÓRIOS 📊
     # =====================================================================
     elif st.session_state.menu_ativo == "relatorios":
@@ -762,6 +763,7 @@ with col_conteudo_dinamico:
                         ws_op["A1"].font = Font(name=FONTE_XLSX, size=11, bold=True)
                         ws_op["A1"].alignment = alinhamento_centro
                         ws_op.row_dimensions[1].height = 30
+                        for col in range(1, 10): ws_op.cell(row=1, column=col).border = borda_fina
                         
                         # Linha 2: Subtítulo
                         ws_op.append([titulo_lote])
@@ -769,6 +771,7 @@ with col_conteudo_dinamico:
                         ws_op["A2"].font = Font(name=FONTE_XLSX, size=11, bold=True)
                         ws_op["A2"].alignment = alinhamento_centro
                         ws_op.row_dimensions[2].height = 30
+                        for col in range(1, 10): ws_op.cell(row=2, column=col).border = borda_fina
                         
                         # Linha 3: Cabeçalho
                         headers_op = ["Unidade", "Policial", "CPF", "Empenho", "Data", "Horas", "Valor", "Total", "Liquidação"]
@@ -781,26 +784,30 @@ with col_conteudo_dinamico:
                             cell.alignment = alinhamento_centro
                             cell.border = borda_fina
                         
-                        # Larguras das colunas (iguais ao modelo)
-                        larguras_colunas = {"A": 11.569, "B": 50.559, "C": 16.282, "D": 17.567, "E": 15.139, "F": 9.283, "G": 13.997, "H": 16.282, "I": 15.139}
+                        # Larguras das colunas
+                        larguras_colunas = {"A": 12.0, "B": 50.559, "C": 16.282, "D": 17.567, "E": 15.139, "F": 9.283, "G": 13.997, "H": 16.282, "I": 15.139}
                         for col_letra, largura in larguras_colunas.items():
                             ws_op.column_dimensions[col_letra].width = largura
                         
-                        # Monta os grupos (Unidade + Policial + CPF + Empenho), preservando a ordem
+                        # Monta os grupos tratando a string da unidade para extrair apenas a sigla
                         grupos_xlsx = []
                         grupo_atual_xlsx = None
                         for row_data in dados_diarias_mes:
                             unidade, policial, cpf, empenho, data_db, jornada, valor = row_data
+                            
+                            # Extrai apenas a sigla se houver o padrão "SIGLA - NOME DA UNIDADE"
+                            sigla_unidade = unidade.split(" - ")[0].strip() if unidade else ""
+                            
                             dt_br = datetime.strptime(data_db, "%Y-%m-%d").strftime("%d/%m/%Y")
                             num_horas = 6 if "6" in jornada else 12
                             
                             if grupo_atual_xlsx is not None and grupo_atual_xlsx["policial"] == policial and grupo_atual_xlsx["empenho"] == empenho:
                                 grupo_atual_xlsx["linhas"].append((dt_br, num_horas, valor))
                             else:
-                                grupo_atual_xlsx = {"unidade": unidade, "policial": policial, "cpf": cpf, "empenho": empenho, "linhas": [(dt_br, num_horas, valor)]}
+                                grupo_atual_xlsx = {"unidade": sigla_unidade, "policial": policial, "cpf": cpf, "empenho": empenho, "linhas": [(dt_br, num_horas, valor)]}
                                 grupos_xlsx.append(grupo_atual_xlsx)
                         
-                        # Escreve os dados, mesclando as colunas de grupo quando há mais de uma linha
+                        # Escreve os dados e trata bordas de células mescladas
                         linha_atual_xlsx = 4
                         for grupo in grupos_xlsx:
                             qtd_linhas_grupo = len(grupo["linhas"])
@@ -833,7 +840,7 @@ with col_conteudo_dinamico:
                             
                             linha_atual_xlsx = linha_fim_grupo + 1
                         
-                        # Linhas de totalizadores (cada uma mesclada em toda a largura da tabela)
+                        # Linhas de totalizadores
                         total_policiais = len(set(item[2] for item in dados_diarias_mes))
                         total_deaev = len(dados_diarias_mes)
                         total_geral = sum(item[6] for item in dados_diarias_mes)
@@ -846,11 +853,16 @@ with col_conteudo_dinamico:
                         for texto_total in textos_totais:
                             ws_op.cell(row=linha_atual_xlsx, column=1, value=texto_total)
                             ws_op.merge_cells(f"A{linha_atual_xlsx}:I{linha_atual_xlsx}")
+                            
+                            # Garante que todas as células da mesclagem dos totais tenham bordas aplicadas
+                            for col in range(1, 10):
+                                cell_borda = ws_op.cell(row=linha_atual_xlsx, column=col)
+                                cell_borda.border = borda_fina
+                                cell_borda.fill = PatternFill(start_color=COR_CABECALHO, end_color=COR_CABECALHO, fill_type="solid")
+                            
                             cell = ws_op.cell(row=linha_atual_xlsx, column=1)
                             cell.font = Font(name=FONTE_XLSX, size=11, bold=True)
-                            cell.fill = PatternFill(start_color=COR_CABECALHO, end_color=COR_CABECALHO, fill_type="solid")
                             cell.alignment = alinhamento_centro
-                            cell.border = borda_fina
                             ws_op.row_dimensions[linha_atual_xlsx].height = 20
                             linha_atual_xlsx += 1
                                     
@@ -870,44 +882,68 @@ with col_conteudo_dinamico:
                         story_op.append(Paragraph(titulo_tabela, estilo_titulo))
                         story_op.append(Paragraph(titulo_lote, estilo_subtitulo))
                         
+                        # Removida qualquer menção à Liquidação. Foco nas 7 colunas essenciais.
                         headers_op = ["Policial Penal", "CPF", "Empenhos", "Data", "Horas", "Valor", "Total"]
                         tabela_dados_pdf = [headers_op]
-                        ultimo_policial = None
-                        ultimo_empenho = None
-                        linhas_grupo_atual = []
                         
-                        def despeja_grupo_pdf(grupo):
-                            total_grupo = sum(item[5] for item in grupo)
-                            for idx, item in enumerate(grupo):
-                                if idx == 0:
-                                    tabela_dados_pdf.append([item[0][:30], item[1], item[2], item[3], str(item[4]), formatar_valor_br(item[5]), formatar_valor_br(total_grupo)])
-                                else:
-                                    tabela_dados_pdf.append(["", "", "", item[3], str(item[4]), formatar_valor_br(item[5]), ""])
-                        
-                        for row_data in dados_diarias_mes:
-                            unidade, policial, cpf, empenho, data_db, jornada, valor = row_data
-                            dt_br = datetime.strptime(data_db, "%Y-%m-%d").strftime("%d/%m/%Y")
-                            num_horas = 6 if "6" in jornada else 12
-                            
-                            if linhas_grupo_atual and (policial != ultimo_policial or empenho != ultimo_empenho):
-                                despeja_grupo_pdf(linhas_grupo_atual)
-                                linhas_grupo_atual = []
-                            ultimo_policial = policial
-                            ultimo_empenho = empenho
-                            linhas_grupo_atual.append((policial, cpf, empenho, dt_br, num_horas, valor))
-                            
-                        if linhas_grupo_atual:
-                            despeja_grupo_pdf(linhas_grupo_atual)
-                                    
-                        t_op = Table(tabela_dados_pdf, colWidths=[220, 95, 95, 75, 50, 70, 70], repeatRows=1)
-                        t_op.setStyle(TableStyle([
+                        # Estilo base da Tabela
+                        estilos_tabela = [
                             ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
                             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
                             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
                             ('FONTSIZE', (0,0), (-1,-1), 9),
                             ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
                             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                        ]))
+                        ]
+                        
+                        grupos_pdf = []
+                        grupo_atual_pdf = None
+                        
+                        # Agrupa os dados para saber exatamente quem deve ser mesclado
+                        for row_data in dados_diarias_mes:
+                            unidade, policial, cpf, empenho, data_db, jornada, valor = row_data
+                            dt_br = datetime.strptime(data_db, "%Y-%m-%d").strftime("%d/%m/%Y")
+                            num_horas = 6 if "6" in jornada else 12
+                            
+                            if grupo_atual_pdf is not None and grupo_atual_pdf["policial"] == policial and grupo_atual_pdf["empenho"] == empenho:
+                                grupo_atual_pdf["linhas"].append((dt_br, num_horas, valor))
+                            else:
+                                grupo_atual_pdf = {"policial": policial, "cpf": cpf, "empenho": empenho, "linhas": [(dt_br, num_horas, valor)]}
+                                grupos_pdf.append(grupo_atual_pdf)
+                        
+                        # Monta as linhas da tabela e gera os comandos de mesclagem (SPAN)
+                        linha_atual_pdf = 1 # Linha 0 é o cabeçalho
+                        for g in grupos_pdf:
+                            qtd_linhas = len(g["linhas"])
+                            total_grupo = sum(item[2] for item in g["linhas"])
+                            
+                            # Se houver mais de uma linha para o mesmo policial/empenho, aplica o SPAN nas colunas fixas
+                            if qtd_linhas > 1:
+                                fim_mesclagem = linha_atual_pdf + qtd_linhas - 1
+                                # Mescla Policial (Col 0), CPF (Col 1), Empenho (Col 2) e Total (Col 6)
+                                estilos_tabela.append(('SPAN', (0, linha_atual_pdf), (0, fim_mesclagem)))
+                                estilos_tabela.append(('SPAN', (1, linha_atual_pdf), (1, fim_mesclagem)))
+                                estilos_tabela.append(('SPAN', (2, linha_atual_pdf), (2, fim_mesclagem)))
+                                estilos_tabela.append(('SPAN', (6, linha_atual_pdf), (6, fim_mesclagem)))
+                            
+                            for idx, (dt_br, num_horas, valor) in enumerate(g["linhas"]):
+                                # Para células mescladas, mandamos os dados completos em todas as linhas. 
+                                # O ReportLab se encarrega de exibir o valor centralizado usando a primeira célula do bloco.
+                                tabela_dados_pdf.append([
+                                    g["policial"][:30],
+                                    g["cpf"],
+                                    g["empenho"],
+                                    dt_br,
+                                    str(num_horas),
+                                    formatar_valor_br(valor),
+                                    formatar_valor_br(total_grupo)
+                                ])
+                            
+                            linha_atual_pdf += qtd_linhas
+                                    
+                        # Definição perfeita de larguras para preencher a página paisagem de forma limpa
+                        t_op = Table(tabela_dados_pdf, colWidths=[220, 95, 95, 75, 50, 70, 70], repeatRows=1)
+                        t_op.setStyle(TableStyle(estilos_tabela))
                         story_op.append(t_op)
                         
                         # Rodapé com totalizadores
@@ -1016,7 +1052,6 @@ with col_conteudo_dinamico:
                         
                         with open(caminho_temp_pdf_tp, "rb") as f_pdf_tp:
                             st.download_button("🔴 Baixar TEMPLATE FINAL em PDF (.pdf)", data=f_pdf_tp.read(), file_name=f"TEMPLATE_{mes_relatorio}_{ano_relatorio}.pdf", mime="application/pdf", use_container_width=True)
-
     # =====================================================================
     # MÓDULO SISTEMA ⚙️
     # =====================================================================
