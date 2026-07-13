@@ -682,7 +682,6 @@ with col_conteudo_dinamico:
                         st.rerun()
 
     # =====================================================================
-   # =====================================================================
     # MÓDULO RELATÓRIOS 📊
     # =====================================================================
     elif st.session_state.menu_ativo == "relatorios":
@@ -975,7 +974,7 @@ with col_conteudo_dinamico:
             
             elif st.session_state.relatorio_tipo_selecionado == "template_final":
                 st.markdown("### 🔍 Opções para: **TEMPLATE FINAL**")
-                formato_template = st.radio("Escolha o formato de saída:", options=["PDF", "PLANILHA"], index=0, horizontal=True)
+                formato_template = st.radio("Escolha o formato de saída:", options=["PLANILHA", "PDF"], index=0, horizontal=True)
                 
                 st.markdown("---")
                 num_processo_tp = st.text_input("Informe o Número do Processo / Protocolo:", placeholder="Ex: 26.216.461-6", key="proc_template")
@@ -986,74 +985,231 @@ with col_conteudo_dinamico:
                     df_bruto = pd.DataFrame(dados_diarias_mes, columns=["Unidade", "Policial", "CPF", "Empenho", "Data", "Jornada", "Valor"])
                     df_consolidado = df_bruto.groupby(["Empenho", "CPF", "Policial"]).agg({"Valor": "sum"}).reset_index()
                     
-                    if mes_relatorio in ["01", "03", "05", "07", "08", "10", "12"]: dia_fim = "31"
-                    elif mes_relatorio in ["04", "06", "09", "11"]: dia_fim = "30"
-                    else: dia_fim = "28"
-                    data_emissao_nl = f"{dia_fim}/{mes_relatorio}/{ano_relatorio}"
+                    import calendar
+                    ultimo_dia = calendar.monthrange(int(ano_relatorio), int(mes_relatorio))[1]
+                    data_emissao_nl = f"{ultimo_dia:02d}/{mes_relatorio}/{ano_relatorio}"
+                    
                     obs_padrao = f"SESP/DEPPEN - PAGAMENTO DE EXTRAJORNADA – REF. {mes_relatorio}/{ano_relatorio} - REGIONAL DE UMUARAMA"
                     
+                    headers_tp = [
+                        'Data de Emissão NL', 'UG Emitente', 'Nota de Empenho', 'Tipo Patrimonial', 'Item Patrimonial', 
+                        'Operação Patrimonial', 'Valor do Item', 'Tipo de Retenção', 'Credor da Retenção', 
+                        'Valor da Base de Cálculo da Retenção', 'Valor da Retenção', 'Observação', 'Mês de Competência', 
+                        'Data do Processo', 'Código do Processo', 'Credor Secundário', 'DEA', 'Tipo de Documento Comprobatório', 
+                        'Número Documento Comprobatório', 'Processo Documento Comprobatório', 'Data Documento Comprobatório', 
+                        'Competência Documento Comprobatório', 'Tipo de Série Documento Comprobatório', 
+                        'Descrição Tipo de Série Documento Comprobatório', 'Chave de Acesso Documento Comprobatório', 
+                        'Código de Verificação Documento Comprobatório', 'Valor Documento Comprobatório', 'Categoria do PADV'
+                    ]
+                    
+                    larguras_colunas = {
+                        'A': 9.29, 'B': 6.29, 'C': 11.29, 'D': 4.29, 'E': 4.29, 'F': 4.29,
+                        'G': 8.29, 'H': 4.29, 'I': 4.29, 'J': 4.29, 'K': 4.29, 'L': 24.29,
+                        'M': 4.29, 'N': 4.29, 'O': 13.29, 'P': 4.29, 'Q': 7.29, 'R': 4.29,
+                        'S': 9.29, 'T': 13.29, 'U': 9.29, 'V': 9.29, 'W': 4.29, 'X': 4.29,
+                        'Y': 4.29, 'Z': 4.29, 'AA': 12.29, 'AB': 11.29
+                    }
+                    
+                    colunas_cinza = {2, 4, 5, 6, 17, 23} # Índices base 1 (B, D, E, F, Q, W)
+                    colunas_sem_fundo_letras = {'H', 'I', 'J', 'K', 'N', 'P', 'X', 'Y', 'Z'}
+                    
+                    # ================= OPÇÃO 1: FORMATO PLANILHA (EXCEL) =================
                     if formato_template == "PLANILHA":
                         wb_tp = Workbook()
                         ws_tp = wb_tp.active
                         ws_tp.title = "Worksheet"
                         
-                        headers_tp = [
-                            'Data de Emissão NL', 'UG Emitente', 'Nota de Empenho', 'Tipo Patrimonial', 'Item Patrimonial', 
-                            'Operação Patrimonial', 'Valor do Item', 'Tipo de Retenção', 'Credor da Retenção', 
-                            'Valor da Base de Cálculo da Retenção', 'Valor da Retenção', 'Observação', 'Mês de Competência', 
-                            'Data do Processo', 'Código do Processo', 'Credor Secundário', 'DEA', 'Tipo de Documento Comprobatório', 
-                            'Número Documento Comprobatório', 'Processo Documento Comprobatório', 'Data Documento Comprobatório', 
-                            'Competência Documento Comprobatório', 'Tipo de Série Documento Comprobatório', 
-                            'Descrição Tipo de Série Documento Comprobatório', 'Chave de Acesso Documento Comprobatório', 
-                            'Código de Verificação Documento Comprobatório', 'Valor Documento Comprobatório', 'Categoria do PADV'
-                        ]
+                        COR_AZUL_CLARO = "4169E1"
+                        COR_CINZA = "D3D3D3"
+                        
+                        fonte_cabecalho_branca = Font(name="Calibri", size=8, bold=False, color="FFFFFF")
+                        fonte_cabecalho_preta = Font(name="Calibri", size=8, bold=False, color="000000")
+                        fonte_dados = Font(name="Calibri", size=8, bold=False, color="000000")
+                        
+                        fill_azul = PatternFill(start_color=COR_AZUL_CLARO, end_color=COR_AZUL_CLARO, fill_type="solid")
+                        fill_cinza = PatternFill(start_color=COR_CINZA, end_color=COR_CINZA, fill_type="solid")
+                        
+                        alinhamento_cabecalho = Alignment(horizontal="left", vertical="center", wrap_text=False)
+                        alinhamento_dados = Alignment(horizontal="left", vertical="center", wrap_text=False)
+                        
                         ws_tp.append(headers_tp)
+                        ws_tp.row_dimensions[1].height = 20
+                        
+                        for col_letra, tamanho in larguras_colunas.items():
+                            ws_tp.column_dimensions[col_letra].width = tamanho
+                        
+                        colunas_sem_fundo_idx = {8, 9, 10, 11, 14, 16, 24, 25, 26}
+                        
+                        for col_num in range(1, len(headers_tp) + 1):
+                            cell = ws_tp.cell(row=1, column=col_num)
+                            cell.alignment = alinhamento_cabecalho
+                            
+                            if col_num in colunas_sem_fundo_idx:
+                                cell.fill = PatternFill(fill_type=None)
+                                cell.font = fonte_cabecalho_preta
+                            elif col_num in colunas_cinza:
+                                cell.fill = fill_cinza
+                                cell.font = fonte_cabecalho_preta
+                            else:
+                                cell.fill = fill_azul
+                                cell.font = fonte_cabecalho_branca
                         
                         for idx, row_c in df_consolidado.iterrows():
                             ws_tp.append([
                                 data_emissao_nl, 390000, row_c["Empenho"], 15, 1902, 58, row_c["Valor"], "", "", "", "",
-                                obs_padrao, int(mes_relatorio), "", num_processo_tp.strip(), "", 0, 23, f"{mes_relatorio}/{ano_relatorio}",
+                                obs_padrao, int(mes_relatorio), "", num_processo_tp.strip(), "", "00000000", 23, f"{mes_relatorio}/{ano_relatorio}",
                                 num_processo_tp.strip(), data_emissao_nl, f"{mes_relatorio}/{ano_relatorio}", 6, "", "", "", row_c["Valor"], ""
                             ])
+                            
+                            linha_atual = ws_tp.max_row
+                            ws_tp.row_dimensions[linha_atual].height = 16
+                            
+                            for col_num in range(1, len(headers_tp) + 1):
+                                cell_dados = ws_tp.cell(row=linha_atual, column=col_num)
+                                cell_dados.font = fonte_dados
+                                cell_dados.alignment = alinhamento_dados
+                            
+                            ws_tp.cell(row=linha_atual, column=17).number_format = '@'
                             
                         caminho_temp_xlsx_tp = os.path.join(DIRETORIO_ATUAL, "temp_tp.xlsx")
                         wb_tp.save(caminho_temp_xlsx_tp)
                         with open(caminho_temp_xlsx_tp, "rb") as f_tp:
                             st.download_button("🟢 Baixar TEMPLATE FINAL em Excel (.xlsx)", data=f_tp.read(), file_name=f"TEMPLATE_{mes_relatorio}_{ano_relatorio}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
                             
+                   
+                  # ================= OPÇÃO 2: FORMATO PDF (FONTE EQUILIBRADA + DENSIDADE EXTREMA) =================
                     elif formato_template == "PDF":
+                        import os
+                        from reportlab.lib import colors
+                        from reportlab.lib.pagesizes import letter, landscape
+                        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+                        
                         caminho_temp_pdf_tp = os.path.join(DIRETORIO_ATUAL, "temp_tp.pdf")
-                        doc_tp = SimpleDocTemplate(caminho_temp_pdf_tp, pagesize=landscape(letter), rightMargin=15, leftMargin=15, topMargin=20, bottomMargin=20)
+                        
+                        # Espaço horizontal total utilizável na página Letter Landscape com margens de 10pt = 772pt
+                        LARGURA_UTIL_PAGINA = 772.0
+                        
+                        # Filtra e calcula a soma das proporções das colunas visíveis
+                        total_unidades_visiveis = sum([larguras_colunas[letra] for i, letra in enumerate(larguras_colunas) if letra not in colunas_sem_fundo_letras and headers_tp[i] != 'Categoria do PADV'])
+                        fator_escala = LARGURA_UTIL_PAGINA / total_unidades_visiveis
+                        
+                        # Dicionário estrito corrigido com 'Mês'
+                        mapa_abreviações_exatas = {
+                            'Data de Emissão NL': 'Data', 'UG Emitente': 'UG', 'Nota de Empenho': 'Not',
+                            'Tipo Patrimonial': 'Tipo', 'Item Patrimonial': 'Item',
+                            'Operação Patrimonial': 'Opi', 'Valor do Item': 'Val', 'Observação': 'Obs',
+                            'Mês de Competência': 'Mês', 'Código do Processo': 'Cod', 'DEA': 'DEA',
+                            'Tipo de Documento Comprobatório': 'Tip', 'Número Documento Comprobatório': 'Num',
+                            'Processo Documento Comprobatório': 'Proc', 'Data Documento Comprobatório': 'Data',
+                            'Competência Documento Comprobatório': 'Comp', 'Tipo de Série Documento Comprobatório': 'Cod',
+                            'Valor Documento Comprobatório': 'Val'
+                        }
+                        
+                        colunas_visiveis = []
+                        for i, h_text in enumerate(headers_tp):
+                            col_num = i + 1
+                            letra = chr(ord('A') + i) if i < 26 else 'AA' if i == 26 else 'AB'
+                            if letra not in colunas_sem_fundo_letras and h_text != 'Categoria do PADV':
+                                titulo_reduzido = mapa_abreviações_exatas.get(h_text, h_text)
+                                largura_calculada = larguras_colunas[letra] * fator_escala
+                                
+                                # Ajuste: Deixa a coluna do Mês 35% mais estreita
+                                if titulo_reduzido == 'Mês':
+                                    largura_calculada = largura_calculada * 0.65
+                                
+                                colunas_visiveis.append({
+                                    'idx_0': i,
+                                    'col_num': col_num,
+                                    'letra': letra,
+                                    'titulo': titulo_reduzido,
+                                    'is_cinza': col_num in colunas_cinza,
+                                    'width_pt': largura_calculada
+                                })
+                        
+                        larguras_pdf_filtradas = [c['width_pt'] for c in colunas_visiveis]
+                        
+                        # Configuração do Documento
+                        doc_tp = SimpleDocTemplate(
+                            caminho_temp_pdf_tp, 
+                            pagesize=landscape(letter), 
+                            rightMargin=10, leftMargin=10, topMargin=15, bottomMargin=15
+                        )
                         story_tp = []
                         
-                        estilos = getSampleStyleSheet()
-                        estilo_titulo = ParagraphStyle('TitTp', parent=estilos['Heading3'], alignment=1, spaceAfter=15)
-                        story_tp.append(Paragraph(f"<b>TEMPLATE DE PRESTAÇÃO DE CONTAS CONSOLIDADA - REF {mes_relatorio}/{ano_relatorio}</b>", estilo_titulo))
-                        story_tp.append(Paragraph(f"Protocolo Geral do Lote: {num_processo_tp.strip()}<br/><br/>", estilos['Normal']))
+                        # --- CONSTRUÇÃO DOS DADOS ---
+                        tabela_tp_pdf = []
                         
-                        headers_pdf_tp = ["Empenho", "Policial / Credor", "CPF", "Valor Consolidado", "Competência"]
-                        tabela_tp_pdf = [headers_pdf_tp]
+                        # 1. Cabeçalho
+                        tabela_tp_pdf.append([c['titulo'] for c in colunas_visiveis])
                         
+                        # 2. Linhas de Dados (Formatadas sem pontos decimais flutuantes)
                         for idx, row_c in df_consolidado.iterrows():
-                            tabela_tp_pdf.append([row_c["Empenho"], row_c["Policial"][:30], row_c["CPF"], f"R$ {row_c['Valor']:.2f}", f"{mes_relatorio}/{ano_relatorio}"])
+                            linha_completa = [
+                                data_emissao_nl, 390000, row_c["Empenho"], 15, 1902, 58, int(row_c['Valor']), "", "", "", "",
+                                obs_padrao, int(mes_relatorio), "", num_processo_tp.strip(), "", "00000000", 23, f"{mes_relatorio}/{ano_relatorio}",
+                                num_processo_tp.strip(), data_emissao_nl, f"{mes_relatorio}/{ano_relatorio}", 6, "", "", "", int(row_c['Valor']), ""
+                            ]
                             
-                        t_tp = Table(tabela_tp_pdf, colWidths=[120, 220, 100, 110, 90])
-                        t_tp.setStyle(TableStyle([
-                            ('BACKGROUND', (0,0), (-1,0), colors.navy),
-                            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-                            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-                            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-                            ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-                            ('FONTSIZE', (0,0), (-1,-1), 9),
-                            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                        ]))
+                            linha_filtrada = []
+                            for c in colunas_visiveis:
+                                valor_celula = str(linha_completa[c['idx_0']])
+                                if c['titulo'] == 'Obs' and len(valor_celula) > 30:
+                                    valor_celula = valor_celula[:28] + ".."
+                                linha_filtrada.append(valor_celula)
+                                
+                            tabela_tp_pdf.append(linha_filtrada)
+                        
+                        # --- ESTILIZAÇÃO COM AJUSTE CIRÚRGICO DE FONTE ---
+                        estilos_tabela = [
+                            ('ALIGN', (0,0), (-1,-1), 'CENTER'),    
+                            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),   
+                            ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+                            ('FONTSIZE', (0,0), (-1,-1), 5.5),      # Aumentado sutilmente para melhor leitura
+                            ('LEADING', (0,0), (-1,-1), 5.5),       # Acompanha o tamanho da fonte para manter o controle
+                            
+                            # Micro-ajuste compensatório no padding para a linha não estourar e manter o visual estreito
+                            ('TOPPADDING', (0,0), (-1,-1), 0.8),    
+                            ('BOTTOMPADDING', (0,0), (-1,-1), 0.8), 
+                            
+                            ('LEFTPADDING', (0,0), (-1,-1), 2),
+                            ('RIGHTPADDING', (0,0), (-1,-1), 2),
+                        ]
+                        
+                        # Identifica a coluna 'Mês' para aplicar o alinhamento exclusivo à esquerda
+                        idx_mes = next((idx for idx, c in enumerate(colunas_visiveis) if c['titulo'] == 'Mês'), None)
+                        if idx_mes is not None:
+                            estilos_tabela.append(('ALIGN', (idx_mes, 0), (idx_mes, -1), 'LEFT'))
+                            estilos_tabela.append(('LEFTPADDING', (idx_mes, 0), (idx_mes, -1), 4))
+                        
+                        # Cores dos Cabeçalhos
+                        for idx_visivel, col_info in enumerate(colunas_visiveis):
+                            if col_info['is_cinza']:
+                                estilos_tabela.append(('BACKGROUND', (idx_visivel, 0), (idx_visivel, 0), colors.HexColor('#E2E8F0')))
+                                estilos_tabela.append(('TEXTCOLOR', (idx_visivel, 0), (idx_visivel, 0), colors.HexColor('#1E293B')))
+                                estilos_tabela.append(('FONTNAME', (idx_visivel, 0), (idx_visivel, 0), 'Helvetica-Bold'))
+                            else:
+                                estilos_tabela.append(('BACKGROUND', (idx_visivel, 0), (idx_visivel, 0), colors.HexColor('#1E3A8A')))
+                                estilos_tabela.append(('TEXTCOLOR', (idx_visivel, 0), (idx_visivel, 0), colors.white))
+                                estilos_tabela.append(('FONTNAME', (idx_visivel, 0), (idx_visivel, 0), 'Helvetica-Bold'))
+                        
+                        # Efeito Zebra sutil
+                        for row_idx in range(1, len(tabela_tp_pdf)):
+                            if row_idx % 2 == 0:
+                                estilos_tabela.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#F8FAFC')))
+                            else:
+                                estilos_tabela.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.white))
+                        
+                        # Geração final
+                        t_tp = Table(tabela_tp_pdf, colWidths=larguras_pdf_filtradas, repeatRows=1)
+                        t_tp.setStyle(TableStyle(estilos_tabela))
+                        
                         story_tp.append(t_tp)
                         doc_tp.build(story_tp)
                         
                         with open(caminho_temp_pdf_tp, "rb") as f_pdf_tp:
                             st.download_button("🔴 Baixar TEMPLATE FINAL em PDF (.pdf)", data=f_pdf_tp.read(), file_name=f"TEMPLATE_{mes_relatorio}_{ano_relatorio}.pdf", mime="application/pdf", use_container_width=True)
     # =====================================================================
-    # MÓDULO SISTEMA ⚙️
+    # Bloco Sistema
     # =====================================================================
     elif st.session_state.menu_ativo == "sistema":
         st.markdown("<h2>⚙️ Parâmetros do Sistema</h2>", unsafe_allow_html=True)
